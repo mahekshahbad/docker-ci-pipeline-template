@@ -59,15 +59,22 @@ jobs:
       id: coverage
       run: |
         echo "Running tests with coverage..."
-        # Run Maven tests with Jacoco coverage
+        # Run tests and generate Jacoco XML report
         ./mvnw clean test jacoco:report
 
-        # Extract coverage from Jacoco report
-        COVERAGE=$(grep -oPm1 "(?<=<counter type=\"INSTRUCTION\" missed=\")[0-9]+" target/site/jacoco/jacoco.xml | awk '{missed=$1} END {total=0; print total}')
-        # Using a simple approach with awk to calculate coverage
-        TOTAL_INSTRUCTIONS=$(grep -oPm1 "(?<=<counter type=\"INSTRUCTION\" covered=\")[0-9]+" target/site/jacoco/jacoco.xml)
-        MISSED_INSTRUCTIONS=$(grep -oPm1 "(?<=<counter type=\"INSTRUCTION\" missed=\")[0-9]+" target/site/jacoco/jacoco.xml)
-        COVERAGE_PERCENT=$(awk "BEGIN {printf \"%.2f\", (($TOTAL_INSTRUCTIONS)/($TOTAL_INSTRUCTIONS+$MISSED_INSTRUCTIONS))*100}")
+        XML_PATH="target/jacoco-report/jacoco.xml"
+
+        if [ ! -f "$XML_PATH" ]; then
+          echo "Error: Jacoco XML report not found!"
+          exit 1
+        fi
+
+        # Extract covered and missed instructions
+        COVERED=$(grep 'counter type="INSTRUCTION"' $XML_PATH | grep -oP 'covered="\K[0-9]+')
+        MISSED=$(grep 'counter type="INSTRUCTION"' $XML_PATH | grep -oP 'missed="\K[0-9]+')
+
+        # Calculate coverage percentage
+        COVERAGE_PERCENT=$(awk "BEGIN {printf \"%.2f\", ($COVERED/($COVERED+$MISSED))*100}")
 
         echo "Code Coverage: $COVERAGE_PERCENT%"
         echo "coverage=$COVERAGE_PERCENT" >> $GITHUB_OUTPUT
