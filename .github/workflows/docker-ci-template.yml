@@ -58,33 +58,35 @@ jobs:
     - name: Run tests and calculate coverage
       id: coverage
       run: |
-        echo "Running tests with coverage..."
-        # Run tests and generate Jacoco XML report
+        echo "Running tests with JaCoCo coverage..."
         ./mvnw clean test jacoco:report
 
-        XML_PATH="target/jacoco-report/jacoco.xml"
+        XML_PATH="target/site/jacoco/jacoco.xml"
 
         if [ ! -f "$XML_PATH" ]; then
-          echo "Error: Jacoco XML report not found!"
+          echo "Error: JaCoCo XML report not found at $XML_PATH"
           exit 1
         fi
 
-        # Extract covered and missed instructions
         COVERED=$(grep 'counter type="INSTRUCTION"' $XML_PATH | grep -oP 'covered="\K[0-9]+')
         MISSED=$(grep 'counter type="INSTRUCTION"' $XML_PATH | grep -oP 'missed="\K[0-9]+')
 
-        # Calculate coverage percentage
         COVERAGE_PERCENT=$(awk "BEGIN {printf \"%.2f\", ($COVERED/($COVERED+$MISSED))*100}")
 
-        echo "Code Coverage: $COVERAGE_PERCENT%"
+        echo "====================================="
+        echo " Overall Code Coverage: $COVERAGE_PERCENT%"
+        echo "====================================="
+
         echo "coverage=$COVERAGE_PERCENT" >> $GITHUB_OUTPUT
 
-    - name: Post coverage as PR comment
+    - name: Publish coverage to Pull Request
       if: github.event_name == 'pull_request'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
-        header: "Code Coverage Report"
-        message: "Current code coverage: ${{ steps.coverage.outputs.coverage }}%"
+        header: Code Coverage Report
+        message: |
+          ✅ **Code Coverage Result**
+          - Coverage: **${{ steps.coverage.outputs.coverage }}%**
 
     - name: Build application
       run: ${{ inputs.build_command }}
