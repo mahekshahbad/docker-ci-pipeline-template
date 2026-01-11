@@ -4,27 +4,18 @@ on:
   workflow_call:
     inputs:
       image_name:
-        description: "Docker image name (username/repo)"
         required: true
         type: string
-
       image_tag:
-        description: "Docker image tag (SemVer like 1.0.0)"
         required: true
         type: string
-
       jar_path:
-        description: "Path to the JAR file to be packaged"
         required: true
         type: string
-
       build_command:
-        description: "Command to build the application"
         required: true
         type: string
-
       dockerfile_path:
-        description: "Path to Dockerfile"
         required: false
         default: Dockerfile
         type: string
@@ -34,73 +25,129 @@ on:
         required: true
       DOCKER_PASSWORD:
         required: true
+      SONAR_TOKEN:
+        required: false
+      SONAR_HOST_URL:
+        required: false
+      SONAR_PROJECT_KEY:
+        required: false
 
 jobs:
-  build-and-push:
+  build-and-analyze:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Java 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
 
-    - name: Cache Maven dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2
-        key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+      - name: Make mvnw executable
+        run: chmod +x mvnw
 
-    - name: Run tests and calculate coverage
-      id: coverage
-      run: |
-        echo "Running tests with JaCoCo coverage..."
-        ./mvnw clean test jacoco:report
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
 
-        XML_PATH="target/site/jacoco/jacoco.xml"
+      # -------------------------
+      # PART A: Local Code Coverage
+      # -------------------------
+      - name: Run tests with JaCoCo
+        id: coverage
+        run: |
+          ./mvnw clean test jacoco:report
 
-        if [ ! -f "$XML_PATH" ]; then
-          echo "Error: JaCoCo XML report not found at $XML_PATH"
-          exit 1
-        fi
+          XML="target/site/jacoco/jacoco.xml"
 
-        COVERED=$(grep 'counter type="INSTRUCTION"' $XML_PATH | grep -oP 'covered="\K[0-9]+')
-        MISSED=$(grep 'counter type="INSTRUCTION"' $XML_PATH | grep -oP 'missed="\K[0-9]+')
+          if [ ! -f "$XML" ]; then
+            echo "JaCoCo XML not found at $XML"
+            exit 1
+          fi
 
-        COVERAGE_PERCENT=$(awk "BEGIN {printf \"%.2f\", ($COVERED/($COVERED+$MISSED))*100}")
+          COVERED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'covered="\K[0-9]+')
+          MISSED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'missed="\K[0-9]+')
 
-        echo "====================================="
-        echo " Overall Code Coverage: $COVERAGE_PERCENT%"
-        echo "====================================="
+          TOTAL=$((COVERED + MISSED))
+          COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($COVERED/$TOTAL)*100}")
 
-        echo "coverage=$COVERAGE_PERCENT" >> $GITHUB_OUTPUT
+          echo "Local Coverage: $COVERAGE%"
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
 
-    - name: Publish coverage to Pull Request
-      if: github.event_name == 'pull_request'
-      uses: marocchino/sticky-pull-request-comment@v2
-      with:
-        header: Code Coverage Report
-        message: |
-          ✅ **Code Coverage Result**
-          - Coverage: **${{ steps.coverage.outputs.coverage }}%**
+      - name: Comment local coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: Local Code Coverage
+          message: |
+            ✅ **JaCoCo Coverage**
+            **${{ steps.coverage.outputs.coverage }}%**
 
-    - name: Build application
-      run: ${{ inputs.build_command }}
+      # -------------------------
+      # PART B: SonarQube Analysis
+      # -------------------------
+      - name: SonarQube Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        if: env.SONAR_TOKEN != ''
+        run: |
+          ./mvnw sonar:sonar \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Install jq
+        if: github.event_name == 'pull_request' && env.SONAR_TOKEN != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-    - name: Build and push Docker image
-      run: |
-        docker build \
-          --build-arg JAR_PATH=${{ inputs.jar_path }} \
-          -t ${{ inputs.image_name }}:${{ inputs.image_tag }} .
+      - name: Fetch SonarQube Coverage
+        id: sonar
+        if: github.event_name == 'pull_request' && env.SONAR_TOKEN != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          RESPONSE=$(curl -s -u $SONAR_TOKEN: \
+            "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=${{ secrets.SONAR_PROJECT_KEY }}&metricKeys=coverage")
 
-        docker push ${{ inputs.image_name }}:${{ inputs.image_tag }}
+          SONAR_COVERAGE=$(echo "$RESPONSE" | jq -r '.component.measures[0].value')
+
+          echo "sonar_coverage=$SONAR_COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Comment SonarQube coverage on PR
+        if: github.event_name == 'pull_request' && env.SONAR_TOKEN != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: SonarQube Coverage
+          message: |
+            🔍 **SonarQube Coverage**
+            **${{ steps.sonar.outputs.sonar_coverage }}%**
+
+      # -------------------------
+      # Build & Docker
+      # -------------------------
+      - name: Build application
+        run: ${{ inputs.build_command }}
+
+      - name: Docker login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & push Docker image
+        run: |
+          docker build \
+            --build-arg JAR_PATH=${{ inputs.jar_path }} \
+            -f ${{ inputs.dockerfile_path }} \
+            -t ${{ inputs.image_name }}:${{ inputs.image_tag }} .
+          docker push ${{ inputs.image_name }}:${{ inputs.image_tag }}
