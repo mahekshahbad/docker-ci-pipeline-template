@@ -66,19 +66,19 @@ jobs:
 
           XML="target/site/jacoco/jacoco.xml"
 
-          if [ ! -f "$XML" ]; then
-            echo "JaCoCo XML not found at $XML"
+          COVERED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'covered="\K[0-9]+' | awk '{sum+=$1} END {print sum}')
+          MISSED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'missed="\K[0-9]+' | awk '{sum+=$1} END {print sum}')
+
+          if [ -z "$COVERED" ] || [ -z "$MISSED" ]; then
+            echo "Coverage data not found"
             exit 1
           fi
 
-          COVERED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'covered="\K[0-9]+')
-          MISSED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'missed="\K[0-9]+')
-
-          TOTAL=$((COVERED + MISSED))
-          COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($COVERED/$TOTAL)*100}")
+          COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($COVERED/($COVERED+$MISSED))*100}")
 
           echo "Local Coverage: $COVERAGE%"
           echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+
 
       - name: Comment local coverage on PR
         if: github.event_name == 'pull_request'
