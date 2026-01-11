@@ -64,16 +64,19 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-
 
-      # -------------------------
-      # PART A: JaCoCo Coverage
-      # -------------------------
-      - name: Run tests with JaCoCo
-        id: coverage
+      # ==================================================
+      # PART A: Local Code Coverage (JaCoCo)
+      # ==================================================
+      - name: Run tests & calculate coverage
+        id: local_coverage
         run: |
           ./mvnw clean test jacoco:report
 
           XML="target/site/jacoco/jacoco.xml"
-          [ ! -f "$XML" ] && exit 1
+          if [ ! -f "$XML" ]; then
+            echo "JaCoCo report not found!"
+            exit 1
+          fi
 
           COVERED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'covered="\K[0-9]+' | awk '{s+=$1} END {print s}')
           MISSED=$(grep 'counter type="INSTRUCTION"' "$XML" | grep -oP 'missed="\K[0-9]+' | awk '{s+=$1} END {print s}')
@@ -81,13 +84,26 @@ jobs:
           TOTAL=$((COVERED + MISSED))
           COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($COVERED/$TOTAL)*100}")
 
+          echo "Local Code Coverage: $COVERAGE%"
           echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
 
-      # -------------------------
-      # PART B: SonarCloud
-      # -------------------------
+      - name: Publish local coverage to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `✅ **Local Code Coverage:** ${{ steps.local_coverage.outputs.coverage }}%`
+            })
+
+      # ==================================================
+      # PART B: SonarCloud Analysis
+      # ==================================================
       - name: SonarCloud Scan
-        if: ${{ inputs.sonar_token != '' }}
+        if: inputs.sonar_token != ''
         env:
           SONAR_TOKEN: ${{ inputs.sonar_token }}
         run: |
@@ -97,9 +113,33 @@ jobs:
             -Dsonar.host.url=${{ inputs.sonar_host_url }} \
             -Dsonar.login=${{ inputs.sonar_token }}
 
-      # -------------------------
+      - name: Fetch Sonar coverage
+        if: inputs.sonar_token != ''
+        id: sonar_coverage
+        run: |
+          RESPONSE=$(curl -s -u "${{ inputs.sonar_token }}:" \
+            "${{ inputs.sonar_host_url }}/api/measures/component?component=${{ inputs.sonar_project_key }}&metricKeys=coverage")
+
+          COVERAGE=$(echo "$RESPONSE" | jq -r '.component.measures[0].value')
+
+          echo "SonarQube Coverage: $COVERAGE%"
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Publish Sonar coverage to PR
+        if: github.event_name == 'pull_request' && inputs.sonar_token != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `📊 **SonarQube Coverage:** ${{ steps.sonar_coverage.outputs.coverage }}%`
+            })
+
+      # ==================================================
       # Build & Docker
-      # -------------------------
+      # ==================================================
       - name: Build application
         run: ${{ inputs.build_command }}
 
