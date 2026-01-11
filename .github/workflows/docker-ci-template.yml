@@ -117,7 +117,8 @@ jobs:
         if: inputs.sonar_token != ''
         id: sonar_coverage
         run: |
-          RESPONSE=$(curl -s -u "${{ inputs.sonar_token }}:" \
+          RESPONSE=$(curl -s \
+            -H "Authorization: Bearer ${{ inputs.sonar_token }}" \
             "${{ inputs.sonar_host_url }}/api/measures/component?component=${{ inputs.sonar_project_key }}&metricKeys=coverage")
 
           COVERAGE=$(echo "$RESPONSE" | jq -r '.component.measures[0].value')
