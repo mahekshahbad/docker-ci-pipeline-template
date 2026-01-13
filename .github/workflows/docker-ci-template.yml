@@ -64,9 +64,6 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-
 
-      # ==================================================
-      # PART A: Local Code Coverage (JaCoCo)
-      # ==================================================
       - name: Run tests & calculate coverage
         id: local_coverage
         run: |
@@ -99,9 +96,6 @@ jobs:
               body: `✅ **Local Code Coverage:** ${{ steps.local_coverage.outputs.coverage }}%`
             })
 
-      # ==================================================
-      # PART B: SonarCloud Analysis
-      # ==================================================
       - name: SonarCloud Scan
         if: inputs.sonar_token != ''
         env:
@@ -138,9 +132,6 @@ jobs:
               body: `📊 **SonarQube Coverage:** ${{ steps.sonar_coverage.outputs.coverage }}%`
             })
 
-      # ==================================================
-      # Build & Docker
-      # ==================================================
       - name: Build application
         run: ${{ inputs.build_command }}
 
