@@ -81,11 +81,14 @@ jobs:
           restore-keys: maven-${{ runner.os }}-
 
       # ================= CHECKSTYLE =================
+      
       - name: Run Checkstyle (Linting)
         id: checkstyle
         run: |
-          ./mvnw checkstyle:checkstyle
-          ERRORS=$(grep '<error ' target/site/checkstyle/checkstyle.xml | wc -l)
+          ./mvnw checkstyle:checkstyle \
+            -Dcheckstyle.config.location=google_checks.xml
+
+          ERRORS=$(grep '<error ' target/site/checkstyle/checkstyle.xml | wc -l || true)
           echo "Checkstyle Errors: $ERRORS"
           echo "errors=$ERRORS" >> $GITHUB_OUTPUT
 
