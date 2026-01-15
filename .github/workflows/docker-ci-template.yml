@@ -198,14 +198,28 @@ jobs:
           snyk test --all-projects
 
       # ================= JFROG =================
+      - name: Configure Maven for JFrog
+        if: inputs.JFROG_URL != ''
+        run: |
+          mkdir -p ~/.m2
+          cat <<EOF > ~/.m2/settings.xml
+          <settings>
+            <servers>
+              <server>
+                <id>artifactory</id>
+                <username>${{ secrets.JFROG_USER }}</username>
+                <password>${{ secrets.JFROG_PASSWORD }}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
       - name: Publish JAR to JFrog
         if: inputs.JFROG_URL != ''
-        env:
-          JFROG_USER: ${{ secrets.JFROG_USER }}
-          JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
         run: |
           ./mvnw deploy \
-            -DaltDeploymentRepository=artifactory::default::${{ inputs.JFROG_URL }}/libs-release-local
+            -DskipTests \
+            -DaltDeploymentRepository=artifactory::default::${{ inputs.JFROG_URL }}/docker-local
 
       # ================= DOCKER =================
       - name: Docker login
