@@ -219,7 +219,7 @@ jobs:
         run: |
           ./mvnw deploy \
             -DskipTests \
-            -DaltDeploymentRepository=artifactory::${{ inputs.JFROG_URL }}/libs-release-local
+            -DaltDeploymentRepository=artifactory::${{ inputs.JFROG_URL }}/libs-snapshot-local
 
       # ================= DOCKER =================
       - name: Docker login
