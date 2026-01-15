@@ -47,15 +47,13 @@ on:
         required: false
         type: string
 
-    secrets:
-      DOCKER_USERNAME:
-        required: false
-      DOCKER_PASSWORD:
-        required: false
       JFROG_USERNAME:
         required: false
+        type: string
+
       JFROG_API_KEY:
         required: false
+        type: string
 
 jobs:
   build-and-analyze:
