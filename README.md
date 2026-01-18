@@ -1,46 +1,170 @@
-# docker-ci-pipeline-template
+Reusable Docker CI Pipeline Template
 
-Reusable GitHub Actions pipeline for building applications, creating Docker images, and pushing them to Docker Hub.
+This repository provides a reusable GitHub Actions CI pipeline that can be used across multiple projects.
 
-## Design Notes
+It extends a basic CI pipeline by adding code quality checks, security scanning, artifact publishing, and Docker image build & push, all in a single standardized workflow.
 
-### Reusability Across Multiple Repositories
+What This Template Does
 
-This pipeline template centralizes CI logic into a single reusable workflow.  
-Instead of copying build and Docker steps into every repository:
+When used by a consumer repository, this pipeline automatically performs:
 
-- The same workflow can be reused across multiple repositories
-- Only application-specific values are passed as inputs
-- CI behavior remains consistent across projects
+Code checkout and build setup
 
-Any updates to the CI process can be made once in this template and will automatically apply to all consumer repositories.
+Checkstyle (code scanning / linting)
 
-### Onboarding a New Application Repository
+Unit tests with JaCoCo code coverage
 
-To onboard a new application repository to use this reusable pipeline:
+SonarQube analysis (optional)
 
-1. Ensure the application repository contains:
-   - A valid build command
-   - A Dockerfile
+Snyk security scanning (optional)
 
-2. Create a Docker Hub repository for the application image.
+Application build (JAR)
 
-3. Add the following GitHub Secrets to the application repository:
-   - `DOCKER_USERNAME`
-   - `DOCKER_PASSWORD`
+Publish JAR to JFrog Artifactory (optional)
 
-4. Create a GitHub Actions workflow file at:
+Build and push Docker image
+
+This ensures code quality, security, and artifact traceability in one CI workflow.
+
+Repository Structure
+.github/
+└── workflows/
+    └── docker-ci-template.yml   # Reusable CI workflow
+
+How to Use This Template in a Project
+1. Reference the Template Workflow
+
+In your consumer repository, create a workflow file:
+
 .github/workflows/ci.yml
 
+Example Consumer Workflow
+name: Consumer CI Pipeline
 
-5. Configure the workflow to call this reusable pipeline and pass:
-- Docker image name
-- Build command
-- Dockerfile path
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-6. Push the changes to the default branch.
+jobs:
+  docker-ci:
+    uses: <ORG>/<TEMPLATE-REPO>/.github/workflows/docker-ci-template.yml@main
 
-After setup, every push to the default branch will automatically:
-- Build the application
-- Build the Docker image
-- Push the image to Docker Hub
+    with:
+      image_name: your-dockerhub-username/app-name
+      image_tag: 1.0.0
+      jar_path: target/app.jar
+      build_command: ./mvnw clean package
+
+      sonar_project_key: ${{ vars.SONAR_PROJECT_KEY }}
+      sonar_host_url: ${{ vars.SONAR_HOST_URL }}
+      sonar_organization: ${{ vars.SONAR_ORGANIZATION }}
+      sonar_token: ${{ vars.SONAR_TOKEN }}
+
+      SNYK_TOKEN: ${{ vars.SNYK_TOKEN }}
+      JFROG_URL: https://yourcompany.jfrog.io/artifactory
+
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      JFROG_USER: ${{ secrets.JFROG_USER }}
+      JFROG_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+
+Required Inputs
+Input Name	Description
+image_name	Docker image name
+image_tag	Docker image tag
+jar_path	Path to generated JAR
+build_command	Maven build command
+Optional Inputs
+Input Name	Description
+sonar_project_key	SonarQube project key
+sonar_host_url	SonarQube server URL
+sonar_organization	Sonar organization
+sonar_token	Sonar authentication token
+SNYK_TOKEN	Snyk API token
+JFROG_URL	JFrog Artifactory base URL
+
+Note:
+If optional inputs are not provided, the corresponding steps are automatically skipped.
+
+Required Secrets
+
+Configure the following GitHub Secrets in the consumer repository:
+
+Secret Name	Purpose
+DOCKER_USERNAME	Docker registry username
+DOCKER_PASSWORD	Docker registry password
+JFROG_USER	JFrog username
+JFROG_PASSWORD	JFrog password
+Pipeline Execution Flow
+
+Checkout source code
+
+Setup Java and Maven cache
+
+Run Checkstyle (code scanning)
+
+Run tests and generate JaCoCo coverage
+
+Upload reports as GitHub Actions artifacts
+
+Run SonarQube scan (if configured)
+
+Run Snyk security scan (if configured)
+
+Build application JAR
+
+Publish JAR to JFrog Artifactory
+
+Build and push Docker image
+
+Where to View Results
+GitHub Actions
+
+Checkstyle report
+
+JaCoCo coverage report
+
+Complete workflow logs
+
+Snyk Dashboard
+
+Dependency vulnerability results
+
+Docker image security issues
+
+JFrog Artifactory
+
+Maven artifacts (.jar, .pom, metadata)
+
+Versioned snapshot and release builds
+
+Benefits of This Template
+
+Reusable across multiple repositories
+
+Enforces consistent CI standards
+
+Early detection of code quality issues
+
+Early security vulnerability detection
+
+Centralized artifact management
+
+Reduces CI duplication and maintenance effort
+
+Summary
+
+This reusable CI pipeline provides a production-ready DevSecOps workflow that integrates:
+
+Code quality checks
+
+Security scanning
+
+Artifact publishing
+
+Docker image build and push
+
+All achieved using one standardized reusable GitHub Actions template.
