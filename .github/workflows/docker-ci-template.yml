@@ -190,19 +190,20 @@ jobs:
         run: npm install -g snyk
 
       - name: Run Snyk Scan
+        id: snyk_scan
         if: inputs.SNYK_TOKEN != ''
         env:
           SNYK_TOKEN: ${{ inputs.SNYK_TOKEN }}
         run: |
           snyk auth $SNYK_TOKEN
-          snyk test --all-projects --severity-threshold=high > snyk-result.txt || true
 
-          # Count vulnerabilities
-          HIGH=$(grep -c "High Severity Vulnerability" snyk-result.txt || true)
-          CRITICAL=$(grep -c "Critical Severity Vulnerability" snyk-result.txt || true)
+          snyk test --all-projects --json > snyk.json || true
 
-          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          CRITICAL=$(jq '[.vulnerabilities[] | select(.severity=="critical")] | length' snyk.json)
+          HIGH=$(jq '[.vulnerabilities[] | select(.severity=="high")] | length' snyk.json)
+
           echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
 
       - name: Publish Snyk result to PR
         if: github.event_name == 'pull_request' && inputs.SNYK_TOKEN != ''
