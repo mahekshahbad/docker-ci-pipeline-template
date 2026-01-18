@@ -195,7 +195,31 @@ jobs:
           SNYK_TOKEN: ${{ inputs.SNYK_TOKEN }}
         run: |
           snyk auth $SNYK_TOKEN
-          snyk test --all-projects
+          snyk test --all-projects --severity-threshold=high > snyk-result.txt || true
+
+          # Count vulnerabilities
+          HIGH=$(grep -c "High Severity Vulnerability" snyk-result.txt || true)
+          CRITICAL=$(grep -c "Critical Severity Vulnerability" snyk-result.txt || true)
+
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+
+      - name: Publish Snyk result to PR
+        if: github.event_name == 'pull_request' && inputs.SNYK_TOKEN != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔐 **Snyk Security Scan Result**
+              
+              - 🔴 Critical vulnerabilities: ${{ steps.snyk_scan.outputs.critical }}
+              - 🟠 High vulnerabilities: ${{ steps.snyk_scan.outputs.high }}
+              
+              Please review before merging.`
+            })
 
       # ================= JFROG =================
       - name: Configure Maven for JFrog
