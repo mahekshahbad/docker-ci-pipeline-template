@@ -199,8 +199,8 @@ jobs:
 
           snyk test --all-projects --json > snyk.json || true
 
-          CRITICAL=$(jq '[.vulnerabilities[] | select(.severity=="critical")] | length' snyk.json)
-          HIGH=$(jq '[.vulnerabilities[] | select(.severity=="high")] | length' snyk.json)
+          CRITICAL=$(jq '[.. | objects | select(has("severity")) | select(.severity=="critical")] | length' snyk.json)
+          HIGH=$(jq '[.. | objects | select(has("severity")) | select(.severity=="high")] | length' snyk.json)
 
           echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
           echo "high=$HIGH" >> $GITHUB_OUTPUT
